@@ -10,6 +10,8 @@ from langchain.chains import LLMMathChain, LLMChain
 from langchain_community.tools import DuckDuckGoSearchResults
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
+from typing import Annotated
+import operator
 
 load_dotenv()
 
@@ -17,11 +19,12 @@ duckduckgo_tool = DuckDuckGoSearchResults()
 
 # Define the state type
 class State(TypedDict):
-    question: str
-    sql_output: str
+    question:  Annotated[list, operator.add]
+    sql_output: Annotated[str, operator.add]
+    pre_answer: Annotated[str, operator.add]
     final_output: str
 
-#class DataAnalystState(TypedDict)
+
 # Create an SQLAlchemy engine instance for DuckDB
 engine = create_engine('duckdb:///sales_fake_project/seeds/project.db')
 
@@ -116,7 +119,7 @@ builder.add_node("SQLAgent", lambda state: {
 
 # Node for SalesAnalystAgent: takes the original question and the SQL agent's output, and produces the final answer.
 builder.add_node("SalesAnalystAgent", lambda state: {
-    "final_output": pricing_agent.invoke({
+    "pre_answer": sales_agent.invoke({
         "messages": [HumanMessage(content=f"Question: {state['question']}\nSQL Output: {state['sql_output']}")]
     })
 })
@@ -124,17 +127,17 @@ builder.add_node("SalesAnalystAgent", lambda state: {
 
 # Node for PricingAnalystAgent: takes the original question and the SQL agent's output, and produces the final answer.
 builder.add_node("PricingAnalystAgent", lambda state: {
-    "final_output": pricing_agent.invoke({
+    "pre_answer": pricing_agent.invoke({
         "messages": [HumanMessage(content=f"Question: {state['question']}\nSQL Output: {state['sql_output']}")]
     })
 })
 
-# # Node for SalesAnalystAgent: takes the original question and the SQL agent's output, and produces the final answer.
-# builder.add_node("LeadDataAnalystAgent", lambda state: {
-#     "final_output": pricing_agent.invoke({
-#         "messages": [HumanMessage(content=f"Question: {state['question']}\nSQL Output: {state['sql_output']}")]
-#     })
-# })
+# Node for SalesAnalystAgent: takes the original question and the SQL agent's output, and produces the final answer.
+builder.add_node("LeadDataAnalystAgent", lambda state: {
+    "final_output": lead_data_agent.invoke({
+        "messages": [HumanMessage(content=f"Question: {state['question']}\Final Output: {state['final_output']}")]
+    })
+})
 
 builder.add_edge(START, "SQLAgent")
 builder.add_edge("SQLAgent", "SalesAnalystAgent")
