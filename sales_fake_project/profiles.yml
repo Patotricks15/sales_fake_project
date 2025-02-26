@@ -1,0 +1,7 @@
+sales_fake_project:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: seeds/project.db  # Replace with the actual path to your project.db file
+      threads: 1
