@@ -33,7 +33,7 @@ engine = create_engine('duckdb:///dbt/seeds/project.db')
 # Initialize SQLDatabase with view_support enabled
 sql_database = SQLDatabase(engine=engine, view_support=True)
 # Instantiate the LLM
-model_3_5 = ChatOpenAI(model="gpt-3.5-turbo-1106", temperature=0)
+model_3_5 = ChatOpenAI(model="gpt-3.5-turbo-1106", temperature=0, max_tokens=1000)
 model_4o = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 # Create the SQL toolkit and get its tools
 toolkit = SQLDatabaseToolkit(db=sql_database, llm=model_3_5)
