@@ -24,7 +24,7 @@ class State(TypedDict):
     question:  str
     sql_output: str
     pre_answer: Annotated[list, operator.add]
-    final_output: BaseModel
+    final_output: dict
 
 
 # Create an SQLAlchemy engine instance for DuckDB
@@ -117,24 +117,22 @@ scrum_master_prefix = (
 
 # structuring the message for the ScrumMasterAgent using structured_outputs
 class Task(BaseModel):
-    name: str = "Name"
     title: str = Field(..., description="The title of the task")
-    description: Optional[str] = Field(
+    description: str = Field(
         ..., description="Description of the task, what the task is about, what the data analysts expected to do"
     )
-    data_analyst_level: List[str] = Field(
+    data_analyst_level: str = Field(
         ..., description="The data analysts assigned to this task (junior, mid-level or senior)"
         )
 
 class Tasks(BaseModel):
-    name: str = "Name"
     tasks: List[Task]
 
 model_with_structured_output = model_3_5.with_structured_output(Tasks)
 
 scrum_master_system_message = SystemMessage(content=scrum_master_prefix)
 # Create the Scrum Master agent
-scrum_master_agent = create_react_agent(model_3_5, tools =[], messages_modifier=scrum_master_system_message)
+scrum_master_agent = create_react_agent(model_3_5, tools =[], messages_modifier=scrum_master_system_message, response_format=Tasks)
 
 
 # Build the State Graph
@@ -263,9 +261,9 @@ with open("sales_project_graph.png", "wb") as f:
     f.write(png_bytes)
 
 # REPL loop to ask questions and get final answers
-while True:
-    user_question = input("Enter your question: ")
-    initial_state: State = {"question": user_question}
-    final_state = graph.invoke(initial_state)
-    print("Final Answer:", final_state["final_output"]['messages'][-1].content)
-    print("----")
+
+user_question = input("Enter your question: ")
+initial_state: State = {"question": user_question}
+final_state = graph.invoke(initial_state)
+print("Final Answer:", final_state["final_output"]['messages'][-1].content)
+print("----")
