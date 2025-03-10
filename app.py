@@ -229,7 +229,10 @@ def scrum_master_agent_node(state: dict) -> dict:
     output = scrum_master_agent.invoke({
         "messages": [HumanMessage(content=f"Pre-answer from LeadDataAnalystAgent: {state['pre_answer'][-1]}")]
     })
-    return {"final_output": output}
+
+    structured_output = model_with_structured_output.invoke(output['messages'][-1].content)
+
+    return {"final_output": structured_output}
 
 
 
@@ -263,7 +266,4 @@ with open("sales_project_graph.png", "wb") as f:
 user_question = input("Enter your question: ")
 initial_state: State = {"question": user_question}
 final_state = graph.invoke(initial_state)
-#print("Final Answer:", final_state["final_output"]['messages'][-1].content)
-
-print(model_with_structured_output.invoke(final_state["final_output"]['messages'][-1].content))
-print("----")
+print("Final Answer:", final_state["final_output"])
