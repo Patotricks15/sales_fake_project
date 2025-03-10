@@ -100,8 +100,6 @@ lead_data_prefix = (
     "Your role is to review the answers obtained from data queries and generate tasks that yield actionable insights. "
     "Analyze these responses, assess their feasibility, and recommend the most viable and impactful tasks to pursue. "
     "Focus solely on analyzing the provided context and recommending prioritized tasks—do not generate SQL queries here."
-    "The expected result is a list of task cards with the following structure: 1 for a junior data analyst, 1 for a mid-level data analyst, and 1 for a senior data analyst."
-    "The cards NEEDS to have the following structure: title, description and data_analyst_level"
 )
 lead_data_system_message = SystemMessage(content=lead_data_prefix)
 # Create the Lead Data Analyst agent (no extra tools needed)
@@ -265,5 +263,7 @@ with open("sales_project_graph.png", "wb") as f:
 user_question = input("Enter your question: ")
 initial_state: State = {"question": user_question}
 final_state = graph.invoke(initial_state)
-print("Final Answer:", final_state["final_output"]['messages'][-1].content)
+#print("Final Answer:", final_state["final_output"]['messages'][-1].content)
+
+print(model_with_structured_output.invoke(final_state["final_output"]['messages'][-1].content))
 print("----")
