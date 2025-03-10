@@ -12,6 +12,8 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 from typing import Annotated
 import operator
+from typing import Optional, List
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -22,11 +24,11 @@ class State(TypedDict):
     question:  str
     sql_output: str
     pre_answer: Annotated[list, operator.add]
-    final_output: str
+    final_output: BaseModel
 
 
 # Create an SQLAlchemy engine instance for DuckDB
-engine = create_engine('duckdb:///sales_fake_project/seeds/project.db')
+engine = create_engine('duckdb:///dbt/seeds/project.db')
 
 # Initialize SQLDatabase with view_support enabled
 sql_database = SQLDatabase(engine=engine, view_support=True)
@@ -98,12 +100,41 @@ lead_data_prefix = (
     "Your role is to review the answers obtained from data queries and generate tasks that yield actionable insights. "
     "Analyze these responses, assess their feasibility, and recommend the most viable and impactful tasks to pursue. "
     "Focus solely on analyzing the provided context and recommending prioritized tasks—do not generate SQL queries here."
+    "The expected result is a list of task cards with the following structure: 1 for a junior data analyst, 1 for a mid-level data analyst, and 1 for a senior data analyst."
+    "The cards NEEDS to have the following structure: title, description and data_analyst_level"
 )
 lead_data_system_message = SystemMessage(content=lead_data_prefix)
 # Create the Lead Data Analyst agent (no extra tools needed)
 lead_data_agent = create_react_agent(model_3_5, tools=[math_tool], messages_modifier=lead_data_system_message)
 
+# Create the ScrumMasterAgent
+scrum_master_prefix = (
+    "You are a ScrumMasterAgent, an expert in Agile methodologies, team facilitation, and process improvement. "
+    "Your role is to review the team's progress, identify impediments, and recommend actions to improve productivity and efficiency. "
+    "Analyze the provided context and suggest prioritized tasks to enhance data analyst team collaboration and sprint success."
+    "Read the answer from the LeadDataAnalystAgent and generate new task cards: 1 for a junior data analyst, 1 for a mid-level data analyst, and 1 for a senior data analyst."
+)
 
+# structuring the message for the ScrumMasterAgent using structured_outputs
+class Task(BaseModel):
+    name: str = "Name"
+    title: str = Field(..., description="The title of the task")
+    description: Optional[str] = Field(
+        ..., description="Description of the task, what the task is about, what the data analysts expected to do"
+    )
+    data_analyst_level: List[str] = Field(
+        ..., description="The data analysts assigned to this task (junior, mid-level or senior)"
+        )
+
+class Tasks(BaseModel):
+    name: str = "Name"
+    tasks: List[Task]
+
+model_with_structured_output = model_3_5.with_structured_output(Tasks)
+
+scrum_master_system_message = SystemMessage(content=scrum_master_prefix)
+# Create the Scrum Master agent
+scrum_master_agent = create_react_agent(model_3_5, tools =[], messages_modifier=scrum_master_system_message)
 
 
 # Build the State Graph
@@ -179,21 +210,47 @@ def lead_data_analyst_agent_node(state: dict) -> dict:
     """
     # Prepare the message with the question and the accumulated final output.
     output = lead_data_agent.invoke({
-        "messages": [HumanMessage(content=f"Question: {state['question']}\n Pre-answers from Sales Analyst and Pricing Analyst: {state['pre_answer']}")]
+        "messages": [HumanMessage(content=f"""Question: {state['question']}
+                                  Pre-answers from Sales Analyst and Pricing Analyst: {state['pre_answer']}""")]
+    })
+    return {"pre_answer": [output]}
+
+
+
+def scrum_master_agent_node(state: dict) -> dict:
+    # Prepare the message with the question and the SQL output.
+    """
+    Invokes the ScrumMaster Agent by taking the original question and the accumulated final output from the Lead Data Analyst Agent,
+    then produces an updated final output with actionable insights.
+
+    Args:
+        state (dict): A dictionary containing 'question' and 'final_output' keys, where 'final_output'
+                      holds the previously accumulated output.
+
+    Returns:
+        dict: A dictionary containing the key 'final_output' with the updated insights from the ScrumMaster Agent.
+    """
+    output = scrum_master_agent.invoke({
+        "messages": [HumanMessage(content=f"Pre-answer from LeadDataAnalystAgent: {state['pre_answer'][-1]}")]
     })
     return {"final_output": output}
+
+
+
 
 builder.add_node("SQLAgent",sql_agent_node)
 builder.add_node("SalesAnalystAgent",sales_analyst_agent_node)
 builder.add_node("PricingAnalystAgent",pricing_analyst_agent_node)
 builder.add_node("LeadDataAnalystAgent",lead_data_analyst_agent_node)
+builder.add_node("ScrumMasterAgent",scrum_master_agent_node)
 
 builder.add_edge(START, "SQLAgent")
 builder.add_edge("SQLAgent", "SalesAnalystAgent")
 builder.add_edge("SQLAgent", "PricingAnalystAgent")
 builder.add_edge("PricingAnalystAgent", "LeadDataAnalystAgent")
 builder.add_edge("SalesAnalystAgent", "LeadDataAnalystAgent")
-builder.add_edge("LeadDataAnalystAgent", END)
+builder.add_edge("LeadDataAnalystAgent", "ScrumMasterAgent")
+builder.add_edge("ScrumMasterAgent", END)
 
 
 # Compile the state graph
